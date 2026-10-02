@@ -1,0 +1,34 @@
+version: "1"
+
+source:
+  driver: "mysql"
+  dsn: "root:root@tcp(127.0.0.1:33061)/shop_prod?charset=utf8mb4&parseTime=True&loc=Local"
+
+target:
+  driver: "mysql"
+  dsn: "root:root@tcp(127.0.0.1:33062)/shop_dev?charset=utf8mb4&parseTime=True&loc=Local"
+
+subset:
+  targets:
+    - table: "orders"
+      where: "status = 'completed'"
+      limit: 10
+  
+  reference_tables:
+    - "products"
+
+virtual_foreign_keys:
+  - from_table: "audit_logs"
+    from_column: "operator_id"
+    to_table: "users"
+    to_column: "id"
+
+masking:
+  users:
+    name: "faker.name"
+    email: "faker.email"
+    phone: "faker.phone_number"
+    id_card: "mask.keep_first_last"
+    address: "faker.address"
+  audit_logs:
+    client_ip: "faker.ipv4"

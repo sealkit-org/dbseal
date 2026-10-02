@@ -1,0 +1,31 @@
+version: "0.1"
+
+# Database Connections
+source:
+  driver: "mysql"
+  dsn: "${SOURCE_DB_URL}" # e.g. root:password@tcp(127.0.0.1:3306)/prod_db?parseTime=true
+  options:
+    ssl_mode: "preferred"
+    max_open_conns: 5
+    throttle_sleep_ms: 10 # Micro-sleep between batches to protect production IOPS
+
+target:
+  driver: "mysql"
+  dsn: "${TARGET_DB_URL}" # e.g. root:password@tcp(127.0.0.1:3306)/staging_db?parseTime=true
+
+# Anonymization / Masking Rules
+masking:
+  tables:
+    users:
+      email: "faker.email"
+      phone: "faker.phone_number"
+      password_hash: "constant.$2a$12$dummyhashforlocaldev..."
+      # For join columns (like account_id or code), use deterministic hash to keep relations valid:
+      user_code: "hash.sha256"
+    orders:
+      shipping_address: "faker.address"
+
+# Output configuration for dump & slice
+output:
+  file: "./dbseal_dump.sql.gz"
+  format: "sql.gz"

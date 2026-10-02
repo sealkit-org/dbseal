@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dbseal 🦭 - Visual Subsetting & Masking Canvas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .grid-bg {
+      background-size: 24px 24px;
+      background-image: radial-gradient(circle, #334155 1px, transparent 1px);
+    }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #0f172a; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #475569; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 flex flex-col h-screen overflow-hidden font-sans">
+
+  <!-- Top Navigation Header -->
+  <header class="bg-slate-800/90 backdrop-blur border-b border-slate-700 px-6 py-2.5 flex items-center justify-between z-20">
+    <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-2">
+        <span class="text-2xl">🦭</span>
+        <div>
+          <h1 class="font-bold text-base leading-tight flex items-center gap-2">
+            dbseal
+            <span class="text-[10px] bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-mono">v0.1.0</span>
+          </h1>
+          <p class="text-[11px] text-slate-400">Local-first Database Subsetting & Masking Toolkit</p>
+        </div>
+      </div>
+
+      <!-- 5-Section Navigation Tabs -->
+      <nav class="hidden lg:flex items-center bg-slate-900/80 p-1 rounded-xl border border-slate-700/80 text-xs font-medium space-x-1">
+        <button onclick="switchSection('canvas')" id="nav-canvas" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold flex items-center gap-1.5 transition">
+          <span>🎨</span> 4. Masking & Canvas
+        </button>
+        <button onclick="switchSection('connections')" id="nav-connections" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          <span>🔌</span> 1. Connections
+        </button>
+        <button onclick="switchSection('relations')" id="nav-relations" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          <span>🕵️</span> 2. Virtual FKs
+        </button>
+        <button onclick="switchSection('subset')" id="nav-subset" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          <span>🎯</span> 3. Subsetting
+        </button>
+        <button onclick="switchSection('output')" id="nav-output" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition">
+          <span>📦</span> 5. Output & Export
+        </button>
+      </nav>
+    </div>
+
+    <!-- Center Quick Stats -->
+    <div class="hidden xl:flex items-center space-x-5 text-xs">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-slate-300">Driver: <strong class="text-white font-mono" id="statDriver">MySQL</strong></span>
+      </div>
+      <div class="text-slate-400">Tables: <strong class="text-white" id="statTables">12</strong></div>
+      <div class="text-slate-400">Virtual FKs: <strong class="text-emerald-400" id="statConfirmedFKs">4 confirmed</strong></div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex items-center space-x-2.5">
+      <button onclick="switchSection('output')" class="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 shadow-sm">
+        <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+        YAML Preview
+      </button>
+      <button onclick="downloadYAML()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition shadow-md shadow-indigo-600/30 flex items-center gap-1.5">
+        <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+        Export dbseal.yaml
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Work Area -->
+  <div class="flex flex-1 overflow-hidden relative">
+
+    <!-- ========================================== -->
+    <!-- SECTION 4: CANVAS & MASKING (Default View) -->
+    <!-- ========================================== -->
+    <div id="section-canvas" class="flex flex-1 overflow-hidden">
+      <!-- Left Sidebar: Tables List -->
+      <aside class="w-60 bg-slate-800/60 border-r border-slate-700/60 p-4 flex flex-col z-10">
+        <div class="mb-3">
+          <input type="text" id="tableFilter" oninput="filterTables()" placeholder="Filter tables..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+        </div>
+        <div class="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+          <span>Tables in Schema</span>
+          <span class="text-indigo-400 font-mono" id="tableCountBadge">3</span>
+        </div>
+        <div id="tableList" class="flex-1 overflow-y-auto custom-scroll space-y-1 pr-1 text-xs">
+          <!-- Rendered by JS -->
+        </div>
+      </aside>
+
+      <!-- Center Canvas Area (ER Topology View) -->
+      <main class="flex-1 grid-bg bg-slate-950 p-8 overflow-auto relative custom-scroll" id="canvas">
+        <div class="flex flex-wrap gap-8 items-start justify-center max-w-6xl mx-auto pt-4" id="nodesContainer">
+          <!-- Table Cards Rendered by JS -->
+        </div>
+      </main>
+
+      <!-- Right Drawer: Masking Rule Configuration -->
+      <aside id="drawer" class="w-80 bg-slate-800 border-l border-slate-700 p-5 flex flex-col shadow-2xl transition-all duration-300 transform translate-x-full absolute right-0 top-0 bottom-0 z-30">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-700 mb-4">
+          <div>
+            <h3 class="font-bold text-sm text-white" id="drawerTableCol">users.email</h3>
+            <p class="text-[11px] text-slate-400">Configure Field Anonymization</p>
+          </div>
+          <button onclick="closeDrawer()" class="text-slate-400 hover:text-white p-1 rounded text-lg">&times;</button>
+        </div>
+
+        <div class="space-y-4 flex-1 overflow-y-auto custom-scroll text-xs">
+          <div>
+            <label class="block font-medium text-slate-300 mb-1">Masking Operator</label>
+            <select id="ruleSelect" onchange="updateDrawerRule()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200">
+              <option value="none">None (Keep Original)</option>
+              <option value="faker.email">faker.email (user_xxxx@example.com)</option>
+              <option value="faker.name">faker.name (Pseudo Name)</option>
+              <option value="faker.phone_number">faker.phone_number (138XXXXXXXX)</option>
+              <option value="faker.address">faker.address (Realistic Street Address)</option>
+              <option value="faker.ipv4">faker.ipv4 (Random IP)</option>
+              <option value="mask.keep_first_last">mask.keep_first_last (138****0000)</option>
+              <option value="hash.sha256">hash.sha256 (Deterministic Relational Hash)</option>
+              <option value="constant">constant.xxx (Replace with Constant)</option>
+              <option value="null">null (Set to NULL)</option>
+            </select>
+          </div>
+
+          <div id="constantInputWrapper" class="hidden">
+            <label class="block font-medium text-slate-300 mb-1">Constant Value</label>
+            <input type="text" id="constantInput" placeholder="Enter constant string..." class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200">
+          </div>
+
+          <!-- 3-Row Live Sample Preview -->
+          <div class="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+            <div class="font-semibold text-slate-400 mb-2 flex items-center justify-between">
+              <span>3-Row Live Preview</span>
+              <button onclick="refreshPreview()" class="text-indigo-400 hover:text-indigo-300 text-[11px]">Refresh</button>
+            </div>
+            <div class="space-y-2 font-mono" id="previewRows">
+              <!-- Sample Rows Rendered by JS -->
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-slate-700">
+          <button onclick="saveRule()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-lg font-semibold transition">
+            Apply Rule
+          </button>
+        </div>
+      </aside>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECTION 1: CONNECTIONS (Database Config)   -->
+    <!-- ========================================== -->
+    <div id="section-connections" class="hidden flex-1 bg-slate-950 p-8 overflow-y-auto custom-scroll">
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <span>🔌</span> Part 1: Database Connections
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Configure your Source production database and Target staging database connections.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <!-- Source DB Card -->
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-700">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-cyan-400"></span>
+                <h3 class="font-bold text-sm text-white">Source Database (Production)</h3>
+              </div>
+              <span class="text-[10px] bg-cyan-950 text-cyan-300 border border-cyan-800 px-2 py-0.5 rounded font-mono font-semibold">REQUIRED FOR SLICE & SYNC</span>
+            </div>
+
+            <div class="space-y-3.5 text-xs">
+              <div>
+                <label class="block text-slate-400 mb-1">Driver</label>
+                <select id="srcDriver" onchange="updateConnectionState()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono">
+                  <option value="mysql">MySQL</option>
+                  <option value="postgres">PostgreSQL</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-slate-400 mb-1">Connection String / DSN</label>
+                <input type="text" id="srcDSN" oninput="updateConnectionState()" value="${SOURCE_DB_URL}" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-[11px]" placeholder="root:pass@tcp(127.0.0.1:3306)/prod_db?parseTime=true">
+                <p class="text-[10px] text-slate-500 mt-1">Supports environment variables like <code class="text-slate-400 font-mono">${SOURCE_DB_URL}</code></p>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-slate-400 mb-1">Max Open Conns</label>
+                  <input type="number" id="srcMaxConns" oninput="updateConnectionState()" value="5" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono">
+                </div>
+                <div>
+                  <label class="block text-slate-400 mb-1">Throttle Sleep (ms)</label>
+                  <input type="number" id="srcThrottle" oninput="updateConnectionState()" value="10" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono" title="Micro-sleep between query batches to preserve production IOPS">
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-slate-400 mb-1">SSL Mode</label>
+                <select id="srcSSL" onchange="updateConnectionState()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono">
+                  <option value="preferred">preferred</option>
+                  <option value="required">required</option>
+                  <option value="disabled">disabled</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Target DB Card -->
+          <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl">
+            <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-700">
+              <div class="flex items-center gap-2">
+                <span class="w-3 h-3 rounded-full bg-emerald-400"></span>
+                <h3 class="font-bold text-sm text-white">Target Database (Staging / Dev)</h3>
+              </div>
+              <span class="text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded font-mono font-semibold">REQUIRED ONLY FOR SYNC</span>
+            </div>
+
+            <div class="space-y-3.5 text-xs">
+              <div>
+                <label class="block text-slate-400 mb-1">Driver</label>
+                <select id="tgtDriver" onchange="updateConnectionState()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono">
+                  <option value="mysql">MySQL</option>
+                  <option value="postgres">PostgreSQL</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-slate-400 mb-1">Target DSN (Used by `dbseal sync`)</label>
+                <input type="text" id="tgtDSN" oninput="updateConnectionState()" value="${TARGET_DB_URL}" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-[11px]" placeholder="root:pass@tcp(127.0.0.1:33062)/staging_db?parseTime=true">
+                <p class="text-[10px] text-slate-500 mt-1">Direct in-memory sync streams into this database over the wire</p>
+              </div>
+
+              <div class="p-3 bg-slate-900/90 rounded-xl border border-slate-800 text-[11px] text-slate-400 space-y-2">
+                <div class="flex items-center gap-2 text-emerald-400 font-semibold">
+                  <span>✓</span> Schema Drift Auto-Skip Enabled
+                </div>
+                <p>dbseal dynamically checks target columns and skips deleted legacy columns while tolerating new default migrations.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECTION 2: VIRTUAL FK DEDUCTION            -->
+    <!-- ========================================== -->
+    <div id="section-relations" class="hidden flex-1 bg-slate-950 p-8 overflow-y-auto custom-scroll">
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <span>🕵️</span> Part 2: Virtual Foreign Key Deduction & Sampling
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Automatically infer unconstrained relations (e.g. ORM application-level foreign keys) using heuristic heuristics and 1,000-row sampling JOINs.</p>
+        </div>
+
+        <!-- Deduction Controls -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="font-bold text-sm text-white">Auto-Detection Engine</h3>
+              <p class="text-xs text-slate-400">Match columns naming like <code>{table}_id</code> to primary keys and validate with statistical sampling.</p>
+            </div>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input type="checkbox" id="autoDetectEnabled" checked onchange="updateRelationsState()" class="sr-only peer">
+              <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-700 text-xs">
+            <div>
+              <label class="block text-slate-300 mb-1">Sampling Rows</label>
+              <input type="number" id="sampleRows" value="1000" oninput="updateRelationsState()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono">
+              <p class="text-[10px] text-slate-500 mt-1">Test sample size per unconstrained candidate key</p>
+            </div>
+            <div>
+              <label class="block text-slate-300 mb-1">Confidence Threshold (Match Rate)</label>
+              <div class="flex items-center gap-3">
+                <input type="range" id="matchThreshold" min="80" max="100" value="95" oninput="updateThresholdLabel(this.value); updateRelationsState()" class="flex-1">
+                <span class="font-mono text-emerald-400 font-bold" id="thresholdDisplay">95%</span>
+              </div>
+              <p class="text-[10px] text-slate-500 mt-1">Relations with match rate &ge; threshold are promoted to solid traversal edges</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Discovered Edge List -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl">
+          <h3 class="font-bold text-sm text-white mb-4">Inferred Virtual Relations in Schema</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left">
+              <thead class="text-[11px] text-slate-400 uppercase bg-slate-900/60 border-b border-slate-700">
+                <tr>
+                  <th class="py-2.5 px-4">Source Column</th>
+                  <th class="py-2.5 px-4">Referenced Table</th>
+                  <th class="py-2.5 px-4">Sampling Match Rate</th>
+                  <th class="py-2.5 px-4">Status</th>
+                  <th class="py-2.5 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-700/60 font-mono" id="relationsTableBody">
+                <!-- Rendered by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECTION 3: SUBSETTING RULES & STRATEGY     -->
+    <!-- ========================================== -->
+    <div id="section-subset" class="hidden flex-1 bg-slate-950 p-8 overflow-y-auto custom-scroll">
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <span>🎯</span> Part 3: Subsetting Targets & Traversal Rules
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Define root slice queries, preserve dictionary tables, and configure graph traversal boundary limits.</p>
+        </div>
+
+        <!-- Root Targets -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-700">
+            <div>
+              <h3 class="font-bold text-sm text-white">Root Slice Targets (`subset.targets`)</h3>
+              <p class="text-xs text-slate-400">The seed queries where relational graph traversal starts.</p>
+            </div>
+            <button onclick="addTarget()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition font-medium">
+              + Add Target
+            </button>
+          </div>
+
+          <div id="targetsContainer" class="space-y-3">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Reference Tables -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-3">
+          <div class="pb-3 border-b border-slate-700">
+            <h3 class="font-bold text-sm text-white">Reference Tables (`subset.reference_tables`)</h3>
+            <p class="text-xs text-slate-400">Dictionary, role, and configuration tables preserved 100% in full, regardless of graph distance.</p>
+          </div>
+          <div class="flex flex-wrap gap-2 pt-2" id="refTablesTags">
+            <!-- Rendered by JS -->
+          </div>
+        </div>
+
+        <!-- Strategy Options -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+          <h3 class="font-bold text-sm text-white pb-3 border-b border-slate-700">Graph Traversal Strategy</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+            <div class="space-y-3">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="followDownstream" checked onchange="updateSubsetState()" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                <span class="text-slate-300">Follow 1:N Downstream Relations (users &rarr; orders)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="completeDictionaries" checked onchange="updateSubsetState()" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                <span class="text-slate-300">Complete N:1 Upstream Parents (orders &rarr; users)</span>
+              </label>
+            </div>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-slate-400 mb-1">Max Traversal Depth</label>
+                <input type="number" id="maxDepth" value="4" oninput="updateSubsetState()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-xs">
+              </div>
+              <div>
+                <label class="block text-slate-400 mb-1">Row Cap per Table</label>
+                <input type="number" id="rowCap" value="10000" oninput="updateSubsetState()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-xs">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SECTION 5: OUTPUT & EXPORT                 -->
+    <!-- ========================================== -->
+    <div id="section-output" class="hidden flex-1 bg-slate-950 p-8 overflow-y-auto custom-scroll">
+      <div class="max-w-4xl mx-auto space-y-6">
+        <div>
+          <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <span>📦</span> Part 5: Output Configuration & YAML Generator
+          </h2>
+          <p class="text-xs text-slate-400 mt-1">Review your generated <code>dbseal.yaml</code> specification, customize output artifacts, and execute operations.</p>
+        </div>
+
+        <!-- Output Options -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-6 shadow-xl space-y-4">
+          <h3 class="font-bold text-sm text-white pb-3 border-b border-slate-700">Snapshot File Settings</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">Output File Path</label>
+              <input type="text" id="outputFile" value="./dev_seed_data.sql.gz" oninput="generateYAMLPreview()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-xs">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Format</label>
+              <select id="outputFormat" onchange="generateYAMLPreview()" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white font-mono text-xs">
+                <option value="sql.gz">sql.gz (Compressed SQL)</option>
+                <option value="sql">sql (Plaintext SQL)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Self-Healing Injection</label>
+              <div class="pt-2">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="checkbox" id="selfHealing" checked onchange="generateYAMLPreview()" class="rounded bg-slate-900 border-slate-700 text-indigo-600 focus:ring-0">
+                  <span class="text-slate-300">Append Tarjan FK fixes & seeds</span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Full YAML Live Code View -->
+        <div class="bg-slate-800/80 border border-slate-700 rounded-2xl overflow-hidden shadow-2xl">
+          <div class="px-5 py-3 bg-slate-900/90 border-b border-slate-700 flex items-center justify-between">
+            <span class="text-xs font-mono font-bold text-cyan-400 flex items-center gap-2">
+              <span>📄</span> Generated dbseal.yaml (Live 5-Part Spec)
+            </span>
+            <div class="flex items-center gap-2">
+              <button onclick="runUIValidation()" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg transition flex items-center gap-1 font-medium shadow-sm">
+                <span>🧪</span> Validate Config
+              </button>
+              <button onclick="copyYAMLToClipboard()" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 px-3 py-1 rounded-lg transition flex items-center gap-1">
+                Copy YAML
+              </button>
+              <button onclick="downloadYAML()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1 rounded-lg transition font-medium">
+                Download File
+              </button>
+            </div>
+          </div>
+          <!-- Validation Results Banner (hidden by default) -->
+          <div id="validationBanner" class="hidden p-4 bg-slate-900/95 border-b border-slate-700/80 text-xs font-mono space-y-2"></div>
+          <pre class="p-5 font-mono text-xs text-slate-300 overflow-x-auto bg-slate-950/80 leading-relaxed custom-scroll" id="yamlCodeView"></pre>
+        </div>
+
+        <!-- Terminal Execution Commands -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-xs font-mono space-y-3">
+          <div class="text-slate-400 font-sans font-bold">🚀 Execute via CLI:</div>
+          <div class="p-3 bg-slate-950 rounded-lg text-slate-300 flex items-center justify-between">
+            <span><span class="text-cyan-400">$</span> dbseal slice --config dbseal.yaml --output ./dev_seed_data.sql.gz</span>
+            <button onclick="copyCmd('dbseal slice --config dbseal.yaml --output ./dev_seed_data.sql.gz')" class="text-slate-500 hover:text-slate-300 text-xs">Copy</button>
+          </div>
+          <div class="p-3 bg-slate-950 rounded-lg text-slate-300 flex items-center justify-between">
+            <span><span class="text-cyan-400">$</span> dbseal sync --config dbseal.yaml</span>
+            <button onclick="copyCmd('dbseal sync --config dbseal.yaml')" class="text-slate-500 hover:text-slate-300 text-xs">Copy</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // Unified Application State (Reflecting the 5 parts of dbseal.yaml)
+    const state = {
+      // Part 1: Connections
+      connections: {
+        sourceDriver: "mysql",
+        sourceDSN: "${SOURCE_DB_URL}",
+        sourceSSL: "preferred",
+        sourceMaxConns: 5,
+        sourceThrottle: 10,
+        targetDriver: "mysql",
+        targetDSN: "${TARGET_DB_URL}"
+      },
+      // Part 2: Relations & Virtual FKs
+      relations: {
+        autoDetect: true,
+        sampleRows: 1000,
+        matchThreshold: 0.95,
+        edges: [
+          { from: "orders.user_id", to: "users.id", rate: 99.4, confirmed: true },
+          { from: "order_items.order_id", to: "orders.id", rate: 100.0, confirmed: true },
+          { from: "audit_logs.operator_id", to: "users.id", rate: 97.2, confirmed: true },
+          { from: "sessions.uid", to: "users.id", rate: 88.0, confirmed: false }
+        ]
+      },
+      // Part 3: Subsetting Rules
+      subset: {
+        targets: [
+          { table: "users", query: "SELECT id FROM users WHERE status = 'active' ORDER BY id DESC LIMIT 500" }
+        ],
+        referenceTables: ["roles", "system_settings", "permissions", "categories"],
+        followDownstream: true,
+        completeDictionaries: true,
+        maxDepth: 4,
+        rowCap: 10000
+      },
+      // Part 4: Schema & Masking
+      schema: {
+        tables: [
+          {
+            name: "users",
+            rows: 5000,
+            isRoot: true,
+            columns: [
+              { name: "id", pk: true, type: "bigint" },
+              { name: "username", type: "varchar(50)", rule: "faker.name" },
+              { name: "email", type: "varchar(100)", rule: "faker.email" },
+              { name: "password_hash", type: "varchar(255)", rule: "constant.$2a$12$dummyhash..." },
+              { name: "status", type: "varchar(20)" }
+            ]
+          },
+          {
+            name: "orders",
+            rows: 24000,
+            columns: [
+              { name: "id", pk: true, type: "bigint" },
+              { name: "user_id", fk: "users.id", type: "bigint", virtualFK: true, matchRate: 99.4 },
+              { name: "total_amount", type: "decimal(10,2)" },
+              { name: "shipping_address", type: "text", rule: "faker.address" },
+              { name: "created_at", type: "datetime" }
+            ]
+          },
+          {
+            name: "roles",
+            rows: 12,
+            isRef: true,
+            columns: [
+              { name: "id", pk: true, type: "int" },
+              { name: "role_name", type: "varchar(50)" },
+              { name: "description", type: "varchar(255)" }
+            ]
+          }
+        ]
+      },
+      // Part 5: Output
+      output: {
+        file: "./dev_seed_data.sql.gz",
+        format: "sql.gz",
+        selfHealing: true
+      }
+    };
+
+    let activeTable = null;
+    let activeCol = null;
+
+    // Switch between the 5 main sections
+    function switchSection(sec) {
+      const sections = ['canvas', 'connections', 'relations', 'subset', 'output'];
+      sections.forEach(s => {
+        const el = document.getElementById('section-' + s);
+        const nav = document.getElementById('nav-' + s);
+        if (s === sec) {
+          el.classList.remove('hidden');
+          nav.className = 'px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold flex items-center gap-1.5 transition';
+        } else {
+          el.classList.add('hidden');
+          nav.className = 'px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-1.5 transition';
+        }
+      });
+
+      if (sec === 'output') {
+        generateYAMLPreview();
+      }
+    }
+
+    // Render Canvas & Tables (Section 4)
+    function renderCanvas() {
+      const listEl = document.getElementById("tableList");
+      listEl.innerHTML = state.schema.tables.map(t => `
+        <div onclick="locateTable('${t.name}')" class="p-2 rounded hover:bg-slate-700/50 cursor-pointer flex items-center justify-between text-slate-300">
+          <span class="font-mono">${t.name}</span>
+          <span class="text-[11px] text-slate-500">${t.rows.toLocaleString()}</span>
+        </div>
+      `).join('');
+      document.getElementById("tableCountBadge").innerText = state.schema.tables.length;
+
+      const container = document.getElementById("nodesContainer");
+      container.innerHTML = state.schema.tables.map(t => `
+        <div id="node-${t.name}" class="w-80 bg-slate-800 rounded-xl border border-slate-700 shadow-xl overflow-hidden hover:border-indigo-500/60 transition">
+          <div class="px-4 py-3 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold text-white">${t.name}</span>
+              ${t.isRoot ? '<span class="text-[10px] bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-1.5 py-0.5 rounded">Root</span>' : ''}
+              ${t.isRef ? '<span class="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded">100% Ref</span>' : ''}
+            </div>
+            <span class="text-xs text-slate-400">${t.rows.toLocaleString()} rows</span>
+          </div>
+
+          <div class="divide-y divide-slate-700/40 text-xs">
+            ${t.columns.map(c => `
+              <div onclick="openDrawer('${t.name}', '${c.name}')" class="px-4 py-2 hover:bg-slate-700/40 flex items-center justify-between cursor-pointer group">
+                <div class="flex items-center gap-2">
+                  ${c.pk ? '<span class="text-amber-400 font-bold text-[10px]">PK</span>' : ''}
+                  ${c.fk ? '<span class="text-indigo-400 font-bold text-[10px]">FK</span>' : ''}
+                  <span class="font-mono text-slate-200 group-hover:text-indigo-400 transition">${c.name}</span>
+                  <span class="text-slate-500 text-[10px]">${c.type}</span>
+                </div>
+                <div>
+                  ${c.rule ? `<span class="bg-indigo-900/50 text-indigo-300 border border-indigo-700/50 px-1.5 py-0.5 rounded text-[10px] font-mono">${c.rule}</span>` : ''}
+                  ${c.matchRate ? `<span class="bg-emerald-900/50 text-emerald-300 border border-emerald-700/50 px-1.5 py-0.5 rounded text-[10px] font-mono" title="Validated with 1000-row sampling">✓ ${c.matchRate}%</span>` : ''}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function locateTable(name) {
+      const el = document.getElementById('node-' + name);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-indigo-500');
+        setTimeout(() => el.classList.remove('ring-2', 'ring-indigo-500'), 1500);
+      }
+    }
+
+    // Masking Drawer Functions
+    function openDrawer(table, col) {
+      activeTable = table;
+      activeCol = col;
+      document.getElementById("drawerTableCol").innerText = `${table}.${col}`;
+      
+      const t = state.schema.tables.find(x => x.name === table);
+      const c = t?.columns.find(x => x.name === col);
+      const rule = c?.rule || "none";
+
+      const select = document.getElementById("ruleSelect");
+      if (rule.startsWith("constant.")) {
+        select.value = "constant";
+        document.getElementById("constantInput").value = rule.replace("constant.", "");
+        document.getElementById("constantInputWrapper").classList.remove("hidden");
+      } else {
+        select.value = rule;
+        document.getElementById("constantInputWrapper").classList.add("hidden");
+      }
+
+      refreshPreview();
+      document.getElementById("drawer").classList.remove("translate-x-full");
+    }
+
+    function closeDrawer() {
+      document.getElementById("drawer").classList.add("translate-x-full");
+    }
+
+    function updateDrawerRule() {
+      const select = document.getElementById("ruleSelect");
+      if (select.value === "constant") {
+        document.getElementById("constantInputWrapper").classList.remove("hidden");
+      } else {
+        document.getElementById("constantInputWrapper").classList.add("hidden");
+      }
+      refreshPreview();
+    }
+
+    function refreshPreview() {
+      const select = document.getElementById("ruleSelect");
+      const rule = select.value;
+      const previewEl = document.getElementById("previewRows");
+
+      let samples = ["alice@company.com", "bob@startup.io", "charlie@enterprise.org"];
+      if (activeCol.includes("phone")) samples = ["13800138000", "13912345678", "18688889999"];
+      if (activeCol.includes("address")) samples = ["100 West 33rd St, New York", "456 Market St, San Francisco", "789 Pine St, Seattle"];
+
+      previewEl.innerHTML = samples.map(orig => {
+        let masked = orig;
+        if (rule === "faker.email") masked = "user_" + Math.floor(1000 + Math.random()*9000) + "@example.com";
+        else if (rule === "faker.name") masked = ["Alex Smith", "Jordan Lee", "Taylor Davis"][Math.floor(Math.random()*3)];
+        else if (rule === "faker.phone_number") masked = "138" + Math.floor(10000000 + Math.random()*90000000);
+        else if (rule === "mask.keep_first_last") masked = orig.slice(0, 3) + "****" + orig.slice(-4);
+        else if (rule === "null") masked = "NULL";
+        else if (rule === "hash.sha256") masked = "d41d8cd98f00b204e9800998ecf8427e".slice(0, 12);
+        else if (rule === "constant") masked = document.getElementById("constantInput").value || "[constant]";
+
+        return `
+          <div class="border-b border-slate-800 pb-1.5">
+            <div class="text-slate-500 text-[10px] line-through truncate">${orig}</div>
+            <div class="text-emerald-400 font-semibold truncate">↳ ${masked}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function saveRule() {
+      const select = document.getElementById("ruleSelect");
+      let val = select.value;
+      if (val === "constant") {
+        val = "constant." + (document.getElementById("constantInput").value || "default");
+      }
+      if (val === "none") val = undefined;
+
+      const t = state.schema.tables.find(x => x.name === activeTable);
+      const c = t?.columns.find(x => x.name === activeCol);
+      if (c) c.rule = val;
+
+      closeDrawer();
+      renderCanvas();
+    }
+
+    // Connections State
+    function updateConnectionState() {
+      state.connections.sourceDriver = document.getElementById("srcDriver").value;
+      state.connections.sourceDSN = document.getElementById("srcDSN").value;
+      state.connections.sourceMaxConns = parseInt(document.getElementById("srcMaxConns").value) || 5;
+      state.connections.sourceThrottle = parseInt(document.getElementById("srcThrottle").value) || 10;
+      state.connections.sourceSSL = document.getElementById("srcSSL").value;
+      state.connections.targetDriver = document.getElementById("tgtDriver").value;
+      state.connections.targetDSN = document.getElementById("tgtDSN").value;
+      document.getElementById("statDriver").innerText = state.connections.sourceDriver.toUpperCase();
+    }
+
+    // Relations State
+    function updateRelationsState() {
+      state.relations.autoDetect = document.getElementById("autoDetectEnabled").checked;
+      state.relations.sampleRows = parseInt(document.getElementById("sampleRows").value) || 1000;
+      state.relations.matchThreshold = parseInt(document.getElementById("matchThreshold").value) / 100;
+    }
+
+    function updateThresholdLabel(val) {
+      document.getElementById("thresholdDisplay").innerText = val + "%";
+    }
+
+    function renderRelations() {
+      const tbody = document.getElementById("relationsTableBody");
+      tbody.innerHTML = state.relations.edges.map((e, idx) => `
+        <tr class="hover:bg-slate-800/40">
+          <td class="py-3 px-4 font-semibold text-white">${e.from}</td>
+          <td class="py-3 px-4 text-slate-300">${e.to}</td>
+          <td class="py-3 px-4">
+            <span class="${e.rate >= 95 ? 'text-emerald-400' : 'text-amber-400'} font-bold">${e.rate}%</span>
+          </td>
+          <td class="py-3 px-4">
+            ${e.confirmed ? '<span class="bg-emerald-950 text-emerald-300 border border-emerald-800 px-2 py-0.5 rounded text-[10px]">Confirmed</span>' : '<span class="bg-amber-950 text-amber-300 border border-amber-800 px-2 py-0.5 rounded text-[10px]">Candidate</span>'}
+          </td>
+          <td class="py-3 px-4 text-right">
+            <button onclick="toggleEdge(${idx})" class="text-xs px-2.5 py-1 rounded ${e.confirmed ? 'bg-slate-700 hover:bg-slate-600 text-slate-300' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}">
+              ${e.confirmed ? 'Exclude' : 'Confirm'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function toggleEdge(idx) {
+      state.relations.edges[idx].confirmed = !state.relations.edges[idx].confirmed;
+      renderRelations();
+      const count = state.relations.edges.filter(x => x.confirmed).length;
+      document.getElementById("statConfirmedFKs").innerText = count + " confirmed";
+    }
+
+    // Subsetting State
+    function renderSubsetting() {
+      const targetsContainer = document.getElementById("targetsContainer");
+      targetsContainer.innerHTML = state.subset.targets.map((t, idx) => `
+        <div class="p-3 bg-slate-900 rounded-xl border border-slate-700/80 flex items-center gap-3 text-xs">
+          <div class="w-32">
+            <label class="block text-[10px] text-slate-500 mb-0.5">Table</label>
+            <input type="text" value="${t.table}" oninput="state.subset.targets[${idx}].table = this.value" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white font-mono">
+          </div>
+          <div class="flex-1">
+            <label class="block text-[10px] text-slate-500 mb-0.5">Seed Query</label>
+            <input type="text" value="${t.query}" oninput="state.subset.targets[${idx}].query = this.value" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 text-white font-mono">
+          </div>
+          <button onclick="removeTarget(${idx})" class="mt-4 text-slate-500 hover:text-red-400">&times;</button>
+        </div>
+      `).join('');
+
+      const refContainer = document.getElementById("refTablesTags");
+      refContainer.innerHTML = state.subset.referenceTables.map((r, idx) => `
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-mono">
+          <span>${r}</span>
+          <button onclick="removeRefTable(${idx})" class="text-emerald-500 hover:text-white">&times;</button>
+        </span>
+      `).join('') + `
+        <button onclick="addRefTable()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-mono">
+          + Add Table
+        </button>
+      `;
+    }
+
+    function addTarget() {
+      state.subset.targets.push({ table: "new_table", query: "SELECT id FROM new_table LIMIT 100" });
+      renderSubsetting();
+    }
+
+    function removeTarget(idx) {
+      state.subset.targets.splice(idx, 1);
+      renderSubsetting();
+    }
+
+    function addRefTable() {
+      const name = prompt("Enter reference table name:");
+      if (name && !state.subset.referenceTables.includes(name)) {
+        state.subset.referenceTables.push(name.trim());
+        renderSubsetting();
+      }
+    }
+
+    function removeRefTable(idx) {
+      state.subset.referenceTables.splice(idx, 1);
+      renderSubsetting();
+    }
+
+    function updateSubsetState() {
+      state.subset.followDownstream = document.getElementById("followDownstream").checked;
+      state.subset.completeDictionaries = document.getElementById("completeDictionaries").checked;
+      state.subset.maxDepth = parseInt(document.getElementById("maxDepth").value) || 4;
+      state.subset.rowCap = parseInt(document.getElementById("rowCap").value) || 10000;
+    }
+
+    // Generate Full 5-Part YAML
+    function buildFullYAML() {
+      updateConnectionState();
+      updateRelationsState();
+      updateSubsetState();
+
+      state.output.file = document.getElementById("outputFile").value;
+      state.output.format = document.getElementById("outputFormat").value;
+      state.output.selfHealing = document.getElementById("selfHealing").checked;
+
+      let yaml = `version: "0.1"\n\n`;
+
+      // 1. Connections
+      yaml += `# 1. Database Connections\n`;
+      yaml += `source:\n`;
+      yaml += `  driver: "${state.connections.sourceDriver}"\n`;
+      yaml += `  dsn: "${state.connections.sourceDSN}"\n`;
+      yaml += `  options:\n`;
+      yaml += `    ssl_mode: "${state.connections.sourceSSL}"\n`;
+      yaml += `    max_open_conns: ${state.connections.sourceMaxConns}\n`;
+      yaml += `    throttle_sleep_ms: ${state.connections.sourceThrottle}\n\n`;
+
+      yaml += `target:\n`;
+      yaml += `  driver: "${state.connections.targetDriver}"\n`;
+      yaml += `  dsn: "${state.connections.targetDSN}"\n\n`;
+
+      // 2. Relations
+      yaml += `# 2. Virtual Foreign Key Deduction & Sampling\n`;
+      yaml += `relations:\n`;
+      yaml += `  auto_detect:\n`;
+      yaml += `    enabled: ${state.relations.autoDetect}\n`;
+      yaml += `    sampling:\n`;
+      yaml += `      sample_rows: ${state.relations.sampleRows}\n`;
+      yaml += `      match_threshold: ${state.relations.matchThreshold}\n\n`;
+
+      // 3. Subsetting
+      yaml += `# 3. Subsetting Rules\n`;
+      yaml += `subset:\n`;
+      yaml += `  targets:\n`;
+      state.subset.targets.forEach(t => {
+        yaml += `    - table: "${t.table}"\n`;
+        yaml += `      query: "${t.query}"\n`;
+      });
+      yaml += `\n  reference_tables:\n`;
+      state.subset.referenceTables.forEach(r => {
+        yaml += `    - "${r}"\n`;
+      });
+      yaml += `\n  strategy:\n`;
+      yaml += `    follow_downstream: ${state.subset.followDownstream}\n`;
+      yaml += `    complete_dictionaries: ${state.subset.completeDictionaries}\n`;
+      yaml += `    max_depth: ${state.subset.maxDepth}\n`;
+      yaml += `    row_cap: ${state.subset.rowCap}\n`;
+      yaml += `    row_cap_exceeded: "warn"\n\n`;
+
+      // 4. Masking
+      yaml += `# 4. Anonymization / Data Masking\n`;
+      yaml += `masking:\n`;
+      yaml += `  tables:\n`;
+      let hasMasking = false;
+      state.schema.tables.forEach(t => {
+        const masked = t.columns.filter(c => c.rule);
+        if (masked.length > 0) {
+          hasMasking = true;
+          yaml += `    ${t.name}:\n`;
+          masked.forEach(c => {
+            yaml += `      ${c.name}: "${c.rule}"\n`;
+          });
+        }
+      });
+      if (!hasMasking) {
+        yaml += `    # users:\n    #   email: "faker.email"\n`;
+      }
+      yaml += `\n`;
+
+      // 5. Output
+      yaml += `# 5. Output Configuration\n`;
+      yaml += `output:\n`;
+      yaml += `  file: "${state.output.file}"\n`;
+      yaml += `  format: "${state.output.format}"\n`;
+      yaml += `  self_healing: ${state.output.selfHealing}\n`;
+
+      return yaml;
+    }
+
+    function runUIValidation() {
+      const banner = document.getElementById("validationBanner");
+      banner.classList.remove("hidden");
+      
+      const issues = [];
+      if (!state.connections.sourceDSN || state.connections.sourceDSN.trim() === "") {
+        issues.push({ level: "ERROR", msg: "Source DSN connection string is empty" });
+      }
+      if (!["mysql", "postgres"].includes(state.connections.sourceDriver.toLowerCase())) {
+        issues.push({ level: "ERROR", msg: "Unsupported source driver: " + state.connections.sourceDriver });
+      }
+      if (state.subset.targets.length === 0) {
+        issues.push({ level: "WARN", msg: "No root subset targets specified (will dump/sync entire database)" });
+      } else {
+        state.subset.targets.forEach((t, i) => {
+          if (!t.table) issues.push({ level: "ERROR", msg: `Target query #${i+1} missing table name` });
+          if (!t.query) issues.push({ level: "ERROR", msg: `Target query #${i+1} missing query SQL` });
+        });
+      }
+
+      let maskCount = 0;
+      state.schema.tables.forEach(t => {
+        maskCount += t.columns.filter(c => c.rule).length;
+      });
+
+      const targetSpecified = state.connections.targetDSN && state.connections.targetDSN.trim() !== "";
+      const hasErrors = issues.some(i => i.level === "ERROR");
+      const sliceReady = !hasErrors;
+      const syncReady = !hasErrors && targetSpecified;
+
+      let html = `
+        <div class="flex items-center justify-between text-white font-bold mb-3 pb-2 border-b border-slate-700/80">
+          <span class="flex items-center gap-1.5"><span>🧪</span> Configuration & Execution Mode Readiness</span>
+          <button onclick="document.getElementById('validationBanner').classList.add('hidden')" class="text-slate-400 hover:text-white">&times;</button>
+        </div>
+
+        <!-- Mode Comparison Badges -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-3">
+          <div class="p-3 rounded-xl ${sliceReady ? 'bg-indigo-950/40 border border-indigo-800' : 'bg-red-950/40 border border-red-800'}">
+            <div class="flex items-center justify-between font-bold ${sliceReady ? 'text-indigo-300' : 'text-red-400'} mb-1">
+              <span>Mode 1: dbseal slice</span>
+              <span>${sliceReady ? 'READY ✓' : 'BLOCKED ✕'}</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-sans">Exports offline .sql.gz seed. (Requires Source DB + Output file)</p>
+          </div>
+
+          <div class="p-3 rounded-xl ${syncReady ? 'bg-emerald-950/40 border border-emerald-800' : 'bg-slate-900 border border-slate-800'}">
+            <div class="flex items-center justify-between font-bold ${syncReady ? 'text-emerald-300' : 'text-amber-400'} mb-1">
+              <span>Mode 2: dbseal sync</span>
+              <span>${syncReady ? 'READY ✓' : 'UNCONFIGURED ℹ️'}</span>
+            </div>
+            <p class="text-[11px] text-slate-400 font-sans">${syncReady ? 'Direct in-memory stream to test DB.' : 'Target DSN empty (required only for sync).'}</p>
+          </div>
+        </div>
+      `;
+
+      if (issues.length > 0) {
+        html += `
+          <div class="space-y-1 text-[11px] pt-2 border-t border-slate-800">
+            ${issues.map(iss => `
+              <div class="${iss.level === 'ERROR' ? 'text-red-400 font-semibold' : 'text-amber-300'}">
+                [${iss.level}] ${iss.msg}
+              </div>
+            `).join('')}
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="text-slate-300 space-y-1 text-[11px] pt-1">
+            <div>✓ Source DB Driver (${state.connections.sourceDriver.toUpperCase()}) & DSN valid</div>
+            <div>✓ Subsetting rules defined (${state.subset.targets.length} targets, ${state.subset.referenceTables.length} reference tables)</div>
+            <div>✓ Masking rules configured (${maskCount} masked columns)</div>
+          </div>
+        `;
+      }
+
+      banner.innerHTML = html;
+    }
+
+    function generateYAMLPreview() {
+      const code = buildFullYAML();
+      document.getElementById("yamlCodeView").innerText = code;
+    }
+
+    function downloadYAML() {
+      const yaml = buildFullYAML();
+      const blob = new Blob([yaml], { type: "text/yaml" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "dbseal.yaml";
+      a.click();
+    }
+
+    function copyYAMLToClipboard() {
+      const yaml = buildFullYAML();
+      navigator.clipboard.writeText(yaml);
+      alert("✓ Full 5-part dbseal.yaml copied to clipboard!");
+    }
+
+    function copyCmd(cmd) {
+      navigator.clipboard.writeText(cmd);
+      alert("Command copied: " + cmd);
+    }
+
+    function filterTables() {
+      const query = document.getElementById("tableFilter").value.toLowerCase();
+      document.querySelectorAll("#tableList > div").forEach(el => {
+        const name = el.querySelector("span").innerText.toLowerCase();
+        el.style.display = name.includes(query) ? "flex" : "none";
+      });
+      document.querySelectorAll("#nodesContainer > div").forEach(el => {
+        const name = el.id.replace("node-", "").toLowerCase();
+        el.style.display = name.includes(query) ? "block" : "none";
+      });
+    }
+
+    // Initial render
+    renderCanvas();
+    renderRelations();
+    renderSubsetting();
+    generateYAMLPreview();
+  </script>
+</body>
+</html>
